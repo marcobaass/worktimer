@@ -3,6 +3,63 @@ import { useState, useEffect, useRef } from "react";
 // Default-Zeiten werden nun durch einen State ersetzt
 const INITIAL_CATEGORIES = { Arbeit: 6 * 3600, Haushalt: 2 * 3600, Pause: 2 * 3600 };
 
+// Konvertiert Sekunden in einen "HH:MM" String (z.B. 9000 -> "02:30")
+const secondsToHHMM = (seconds) => {
+  if (isNaN(seconds) || seconds < 0) return "00:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  // padStart sorgt für führende Nullen (z.B. 7 -> "07")
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
+// Konvertiert einen "HH:MM" String in Sekunden (z.B. "02:30" -> 9000)
+const HHMMToSeconds = (hhmm) => {
+  // Regex zur Prüfung des Formats (z.B. "1:30" oder "01:30")
+  if (!/^\d{1,2}:\d{2}$/.test(hhmm)) return NaN;
+
+  const parts = hhmm.split(':');
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+
+  // Zusätzliche Prüfung, ob Minuten gültig sind
+  if (isNaN(hours) || isNaN(minutes) || minutes > 59) return NaN;
+
+  return (hours * 3600) + (minutes * 60);
+};
+
+// Eine dedizierte Komponente für die HH:MM-Eingabe
+function TimeInput({ valueInSeconds, onChange }) {
+  const [displayValue, setDisplayValue] = useState(secondsToHHMM(valueInSeconds));
+
+  // Effekt, um den Anzeigewert zu aktualisieren, wenn sich der Prop von außen ändert
+  // (z.B. beim Reset oder initialem Laden)
+  useEffect(() => {
+    setDisplayValue(secondsToHHMM(valueInSeconds));
+  }, [valueInSeconds]);
+
+  const handleInputChange = (e) => {
+    const inputText = e.target.value;
+    setDisplayValue(inputText); // Erlaube dem Benutzer, frei zu tippen
+
+    const newSeconds = HHMMToSeconds(inputText);
+    // Nur wenn die Eingabe ein gültiges Zeitformat ist, rufen wir die onChange-Funktion
+    // des Parents auf, um den globalen State zu aktualisieren.
+    if (!isNaN(newSeconds)) {
+      onChange(newSeconds);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      placeholder="HH:MM"
+      className="p-2 border rounded w-24 text-center text-sm sm:text-base"
+      value={displayValue}
+      onChange={handleInputChange}
+    />
+  );
+}
+
 export default function WorkdayTracker() {
   // State für verfügbare Kategorien
   const [categories, setCategories] = useState(() => {
@@ -11,27 +68,29 @@ export default function WorkdayTracker() {
   });
 
   const [timers, setTimers] = useState(() => {
+    // Lade beide relevanten Daten direkt hier
     const savedTimers = localStorage.getItem("timers");
-    // Stelle sicher, dass Timers und Kategorien synchron sind
+    const savedCategories = localStorage.getItem("categories");
+
+    // Bestimme die "master"-Liste der Kategorien für den Sync
+    const masterCategories = savedCategories ? JSON.parse(savedCategories) : INITIAL_CATEGORIES;
+
     if (savedTimers) {
-      const parsed = JSON.parse(savedTimers);
-      // Filtere nur die Kategorien, die auch in categories vorhanden sind
-      const filtered = Object.keys(parsed)
-        .filter(key => key in categories)
-        .reduce((obj, key) => {
-          obj[key] = parsed[key];
-          return obj;
+      const parsedTimers = JSON.parse(savedTimers);
+
+      // Filtere Timer basierend auf den masterCategories
+      const syncedTimers = Object.keys(masterCategories)
+        .reduce((acc, key) => {
+          // Nimm den gespeicherten Timer-Wert, falls vorhanden, sonst den Standardwert der Kategorie
+          acc[key] = (key in parsedTimers) ? parsedTimers[key] : masterCategories[key];
+          return acc;
         }, {});
-      // Füge fehlende Kategorien hinzu
-      Object.keys(categories).forEach(key => {
-        if (!(key in filtered)) {
-          filtered[key] = categories[key];
-        }
-      });
-      return filtered;
+
+      return syncedTimers;
     }
-    return { ...categories };
-  });
+    // Wenn keine Timer gespeichert sind, starte mit den Standardwerten der masterCategories
+    return { ...masterCategories };
+});
 
   const [currentCategory, setCurrentCategory] = useState(null);
   const [running, setRunning] = useState(false);
@@ -118,19 +177,17 @@ export default function WorkdayTracker() {
     setTimers(updatedTimers);
   };
 
-  const updateCategoryTime = (categoryName, hours) => {
-    const newTime = hours * 3600; // Konvertiere Stunden in Sekunden
-
+  const updateCategoryTime = (categoryName, newTimeInSeconds) => {
     setCategories(prev => ({
       ...prev,
-      [categoryName]: newTime
+      [categoryName]: newTimeInSeconds
     }));
 
     // Timer nur aktualisieren, wenn er nicht gerade läuft
     if (currentCategory !== categoryName || !running) {
       setTimers(prev => ({
         ...prev,
-        [categoryName]: newTime
+        [categoryName]: newTimeInSeconds
       }));
     }
   };
@@ -195,8 +252,8 @@ export default function WorkdayTracker() {
     originalTimerValueRef.current = null;
   };
 
-  const adjustTimer = (category, hours) => {
-    const adjustment = hours * 3600; // Konvertiere Stunden in Sekunden
+  const adjustTimer = (category, minutes) => { // Erwartet jetzt Minuten
+    const adjustment = minutes * 60; // Rechnet Minuten in Sekunden um
 
     if (running && category === currentCategory && originalTimerValueRef.current !== null) {
       originalTimerValueRef.current = Math.max(0, originalTimerValueRef.current + adjustment);
@@ -224,18 +281,8 @@ export default function WorkdayTracker() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Konvertiere Sekunden in Stunden für Anzeige und Bearbeitung
-  const secondsToHours = (seconds) => {
-    return (seconds / 3600).toFixed(1);
-  };
-
-  // Konvertiere Stunden-String in Sekunden
-  const hoursToSeconds = (hours) => {
-    return parseFloat(hours) * 3600;
-  };
-
   return (
-    <div className="flex flex-col items-center p-4 sm:p-6 bg-gray-100 min-h-screen">
+    <div className="flex flex-col items-center p-4 sm:p-6 bg-gray-100">
       <h1 className="text-xl sm:text-2xl font-bold mb-4">Workday Tracker</h1>
 
       {/* Kategorie-Verwaltungs-Button */}
@@ -261,19 +308,13 @@ export default function WorkdayTracker() {
               onChange={(e) => setNewCategoryName(e.target.value)}
             />
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  className="p-2 border rounded w-12 sm:w-16 mr-2 text-sm sm:text-base"
-                  value={secondsToHours(newCategoryTime)}
-                  onChange={(e) => setNewCategoryTime(hoursToSeconds(e.target.value))}
-                />
-                <span className="mr-2">h</span>
-              </div>
+              {/* Ersetze das alte Input-Feld durch die neue Komponente */}
+              <TimeInput
+                valueInSeconds={newCategoryTime}
+                onChange={setNewCategoryTime}
+              />
               <button
-                className="p-1 sm:p-2 !bg-green-500 text-white rounded hover:!bg-green-600 w-8 h-8 flex items-center justify-center"
+                className="p-1 sm:p-2 !bg-green-500 text-white rounded hover:!bg-green-600 w-8 h-8 flex items-center justify-center ml-2"
                 onClick={addCategory}
                 aria-label="Kategorie hinzufügen"
               >
@@ -292,22 +333,19 @@ export default function WorkdayTracker() {
                   value={name}
                   onChange={(e) => {
                     const newName = e.target.value;
-                    if (newName.trim()) {
+                    // Die Prüfung ist wichtig, um das Umbenennen in einen leeren String zu verhindern
+                    if (newName.trim() || newName === "") {
                       renameCategory(name, newName);
                     }
                   }}
                 />
-                <div className="flex items-center">
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    className="p-2 border rounded w-12 sm:w-16 mr-2 text-sm sm:text-base"
-                    value={secondsToHours(defaultTime)}
-                    onChange={(e) => updateCategoryTime(name, parseFloat(e.target.value))}
-                  />
-                  <span>h</span>
-                </div>
+
+                {/* Ersetze das alte Input-Feld auch hier */}
+                <TimeInput
+                  valueInSeconds={defaultTime}
+                  onChange={(newSeconds) => updateCategoryTime(name, newSeconds)}
+                />
+
                 <button
                   className="p-1 sm:p-2 !bg-red-500 text-white rounded hover:!bg-red-600 text-xs sm:text-sm"
                   onClick={() => removeCategory(name)}
@@ -326,7 +364,7 @@ export default function WorkdayTracker() {
           <div key={category} className="flex items-center">
             <div
               className={`p-3 sm:p-4 rounded-lg shadow-md grid grid-cols-1 sm:grid-cols-3 items-center transition-all flex-grow gap-2 ${
-                currentCategory === category && running ? "bg-blue-500 text-white" : "bg-white"
+                currentCategory === category && running ? "bg-blue-500 text-white" : "bg-white text-gray-800"
               }`}
             >
               {/* Mobile Layout: Kategorie und Zeit in einer Zeile */}
@@ -363,15 +401,15 @@ export default function WorkdayTracker() {
             <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 ml-2">
               <button
                 className="w-6 h-6 flex items-center justify-center rounded !bg-gray-200 hover:!bg-gray-300 text-gray-700 font-bold text-sm"
-                onClick={() => adjustTimer(category, -1)}
-                aria-label="Eine Stunde abziehen"
+                onClick={() => adjustTimer(category, -15)} // -15 Minuten
+                aria-label="15 Minuten abziehen"
               >
                 -
               </button>
               <button
                 className="w-6 h-6 flex items-center justify-center rounded !bg-gray-200 hover:!bg-gray-300 text-gray-700 font-bold text-sm"
-                onClick={() => adjustTimer(category, 1)}
-                aria-label="Eine Stunde hinzufügen"
+                onClick={() => adjustTimer(category, 15)} // +15 Minuten
+                aria-label="15 Minuten hinzufügen"
               >
                 +
               </button>
