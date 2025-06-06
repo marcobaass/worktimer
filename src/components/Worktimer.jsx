@@ -53,7 +53,7 @@ function TimeInput({ valueInSeconds, onChange }) {
     <input
       type="text"
       placeholder="HH:MM"
-      className="p-2 border rounded w-24 text-center text-sm sm:text-base"
+      className="p-2 border rounded w-24 text-center text-sm sm:text-base text-gray-800"
       value={displayValue}
       onChange={handleInputChange}
     />
@@ -303,7 +303,7 @@ export default function WorkdayTracker() {
             <input
               type="text"
               placeholder="Neue Kategorie"
-              className="p-2 border rounded col-span-1 sm:col-span-2 text-sm sm:text-base"
+              className="p-2 border rounded col-span-1 sm:col-span-2 text-sm sm:text-base text-gray-800"
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
             />
@@ -329,7 +329,7 @@ export default function WorkdayTracker() {
               <div key={name} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
                 <input
                   type="text"
-                  className="p-2 border rounded text-sm sm:text-base"
+                  className="p-2 border rounded text-sm sm:text-base text-gray-800"
                   value={name}
                   onChange={(e) => {
                     const newName = e.target.value;
