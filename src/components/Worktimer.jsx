@@ -220,7 +220,7 @@ export default function WorkdayTracker() {
       }
 
       const elapsedSinceStart = (timestamp - startTimeRef.current) / 1000;
-      const newValue = Math.max(0, originalTimerValueRef.current - elapsedSinceStart);
+      const newValue = originalTimerValueRef.current - elapsedSinceStart;
 
       setTimers(prev => {
         if (Math.abs(prev[currentCategory] - newValue) >= 0.1) {
@@ -256,12 +256,12 @@ export default function WorkdayTracker() {
     const adjustment = minutes * 60; // Rechnet Minuten in Sekunden um
 
     if (running && category === currentCategory && originalTimerValueRef.current !== null) {
-      originalTimerValueRef.current = Math.max(0, originalTimerValueRef.current + adjustment);
+      originalTimerValueRef.current += adjustment;
     }
 
     setTimers(prev => ({
       ...prev,
-      [category]: Math.max(0, prev[category] + adjustment)
+      [category]: prev[category] + adjustment
     }));
   };
 
@@ -275,14 +275,16 @@ export default function WorkdayTracker() {
   };
 
   const formatTime = (seconds) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const sign = seconds < 0 ? "-" : "";
+    const abs = Math.abs(seconds);
+    const h = Math.floor(abs / 3600);
+    const m = Math.floor((abs % 3600) / 60);
+    const s = Math.floor(abs % 60);
+    return `${sign}${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
-    <div className="flex flex-col items-center p-4 sm:p-6 bg-gray-100">
+    <div className="flex flex-col items-center bg-white p-4 sm:p-6">
       <h1 className="text-xl sm:text-2xl font-bold mb-4">Workday Tracker</h1>
 
       {/* Kategorie-Verwaltungs-Button */}
@@ -363,20 +365,15 @@ export default function WorkdayTracker() {
         {Object.keys(timers).map((category) => (
           <div key={category} className="flex items-center">
             <div
-              className={`p-3 sm:p-4 rounded-lg shadow-md grid grid-cols-1 sm:grid-cols-3 items-center transition-all flex-grow gap-2 ${
+              className={`p-3 sm:p-4 rounded-lg shadow-md grid grid-cols-[1fr_auto_1fr] items-center transition-all flex-grow gap-2 ${
                 currentCategory === category && running ? "bg-blue-500 text-white" : "bg-white text-gray-800"
               }`}
             >
-              {/* Mobile Layout: Kategorie und Zeit in einer Zeile */}
-              <div className="flex justify-between items-center sm:hidden">
-                <span className="text-base font-semibold">{category}</span>
-                <span className="text-base font-mono">{formatTime(timers[category])}</span>
-              </div>
+              <span className="min-w-0 text-left text-sm sm:text-lg font-semibold truncate">
+                {category}
+              </span>
 
-              {/* Desktop Layout */}
-              <span className="hidden sm:block text-lg font-semibold text-left">{category}</span>
-
-              <div className="flex justify-center">
+              <div className="flex min-w-[6.5rem] shrink-0 items-center justify-center">
                 {(currentCategory !== category || !running) && (
                   <button
                     className="px-3 py-1 rounded !bg-blue-500 text-white hover:!bg-blue-600 transition text-sm sm:text-base"
@@ -395,7 +392,17 @@ export default function WorkdayTracker() {
                 )}
               </div>
 
-              <span className="hidden sm:block text-lg font-mono text-right">{formatTime(timers[category])}</span>
+              <span
+                className={`min-w-0 text-right text-sm sm:text-lg font-mono tabular-nums ${
+                  timers[category] < 0
+                    ? currentCategory === category && running
+                      ? "!text-red-200"
+                      : "text-red-600"
+                    : ""
+                }`}
+              >
+                {formatTime(timers[category])}
+              </span>
             </div>
 
             <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 ml-2">
